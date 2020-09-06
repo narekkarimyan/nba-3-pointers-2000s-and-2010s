@@ -1,0 +1,265 @@
+---
+output:
+  pdf_document:
+    toc: true
+    number_sections: true
+    fig_caption: yes        
+    includes:  
+      in_header: Untitled.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=F, message=F, warning=F,fig.align = "center")
+```
+
+```{r libraries}
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(patchwork)
+library(RColorBrewer)
+```
+
+\pagebreak
+
+```{r read-mutate_data}
+nba <- read.csv('nba.csv')
+
+nba$min <- str_extract(nba$min, pattern = "^[0-9]{1,}")
+
+nba$min <- as.numeric(nba$min)
+
+nba <- nba %>%
+  mutate(decade = case_when(game %in% c(2000:2009) ~ "2000s",  game %in% c(2010:2018) ~ "2010s"))
+
+nba <- nba %>%
+  mutate(three_pointer = case_when(fg3m>0 ~ TRUE,  fg3m==0 ~ FALSE))
+
+nba <- nba %>%
+  mutate(three_pointer_more_than_five = case_when(fg3m>=6 ~ TRUE,  fg3m<6 ~ FALSE))
+
+nba <- nba %>%
+  mutate(three_pointer_attempt = case_when(fg3a>0 ~ TRUE,  fg3a==0 ~ FALSE))
+
+nba <- nba %>% mutate(fg3_pct = case_when(game == 2018 ~ fg3_pct / 100, TRUE  ~ fg3_pct))
+
+nba$aver_min_three_pointer <- nba$min / nba$fg3m
+
+percentage_three_pointer <- nba %>%
+  group_by(three_pointer) %>%
+  summarise(count = n()) %>%
+  mutate(count = count / dim(nba)[1] * 100) %>%
+  as.data.frame()
+
+percentage_three_pointer_attempt <- nba %>%
+  group_by(three_pointer_attempt) %>%
+  summarise(count = n()) %>%
+  mutate(count = count / dim(nba)[1] * 100) %>%
+  as.data.frame()
+
+nba_2000_2009 <- nba %>%
+  filter(game %in% c(2000:2009))
+
+nba_2010_2018 <- nba %>%
+  filter(game %in% c(2010:2018))
+
+percentage_diff_attempts <- (sum(nba_2010_2018$fg3a) - sum(nba_2000_2009$fg3a))/( sum(nba_2000_2009$fg3a)) * 100
+
+percentage_diff_scored <- (sum(nba_2010_2018$fg3m) - sum(nba_2000_2009$fg3m))/( sum(nba_2000_2009$fg3m)) * 100
+
+nba_2000_three_pointer_a_per <- nba_2000_2009 %>%
+  filter(three_pointer_attempt == T) %>%
+  summarise(n()) / dim(nba_2000_2009)[1] * 100
+
+nba_2010_three_pointer_a_per <- nba_2010_2018 %>%
+  filter(three_pointer_attempt == T) %>%
+  summarise(n()) / dim(nba_2010_2018)[1] * 100
+
+nba_2000_three_pointer_s_per <- nba_2000_2009 %>%
+  filter(three_pointer == T) %>%
+  summarise(n()) / dim(nba_2000_2009)[1] * 100
+
+nba_2010_three_pointer_s_per <- nba_2010_2018 %>%
+  filter(three_pointer == T) %>%
+  summarise(n()) / dim(nba_2010_2018)[1] * 100
+
+nba_2000_more_than_five <- nba_2000_2009  %>%
+  filter(three_pointer_more_than_five == T) %>%
+  summarise(n())
+
+nba_2010_more_than_five <- nba_2010_2018  %>%
+  filter(three_pointer_more_than_five == T) %>%
+  summarise(n())
+
+nba_2000_2009_temp <- nba_2000_2009 %>%
+  filter(is.finite(aver_min_three_pointer))
+
+nba_2010_2018_temp <- nba_2010_2018 %>%
+  filter(is.finite(aver_min_three_pointer))
+
+
+```
+
+# The problem/data description
+
+## About the report
+
+As big fans of basketball and, particularly, NBA, we decided to do our analysis on NBA stats. People who watch NBA for a long time will definitely agree with us that during the games more 3 pointers are being scored nowadays compared to the days back in 2000s. More NBA players are skillful in scoring 3 pointers. Some may argue it makes the game that we love so much less beautiful and graceful. However, great players like Steph Curry, Klay Thompson and Damian Lillard made us think about it. As a result, we decided to conduct our analysis on stats of 3 pointers attempted and scored in NBA compared by two decades: 2000s and 2010s.
+
+## Data description
+
+For the report, we obtained the data from an open-source NBA stats API (http://www.balldontlie.io) using /stats endpoint. We fetched stats for every season (specifically, postseason, i.e. Playoffs and Finals) and stored it in a .csv file. Every row of the data represents stats of a particular player in a particular game. Specifically, we have heavily used variables: fg3a (three pointer field goals attempted), fg3m (three pointer field goals scored), game (season year). Also, we should note that 2010s lack stats of 2019 season, because the given API missed that part. So, we are investigating seasons from 2000 to 2009 compared to 2010 to 2018.
+
+## Getting familiar with data
+
+Now, let's dig deeper and understand how the data is distributed. Firstly, from the graph below we can see an equal distribution of records in our data by both decades.
+
+```{r fig.height=4, fig.width=4}
+ggplot(nba, aes(x=factor(1), fill=decade)) + geom_bar(width = 1) +
+  coord_polar(theta = "y") + 
+  theme_void() + scale_fill_manual(values=c("orange", "black")) +
+  labs(title = "Percentage of data distribution by decade", fill = "Decade")
+```
+
+Below graph represents the overall percentage of attempted 3 pointers in our data. Percentage of 3 pointers attempted is `r round(percentage_three_pointer_attempt[2,2], 2)`%
+
+```{r fig.height=3.5, fig.width=3.5}
+ggplot(nba, aes(x=factor(1), fill=three_pointer_attempt)) + geom_bar(width = 1) +
+  coord_polar(theta = "y") + 
+  theme_void() + scale_fill_manual(values=c("orange", "black"))  + 
+  labs(title = "Overall Percentage of 3 pointers attempts", fill = "3 Pointers attempted")
+```
+
+Below graph represents the overall percentage of 3 pointers scored in our data. Particularly, percentage of 3 pointers scored is `r round(percentage_three_pointer[2,2], 2)`%
+
+```{r fig.height=3.5, fig.width=3.5}
+ggplot(nba, aes(x=factor(1), fill=three_pointer)) + geom_bar(width = 1) +
+  coord_polar(theta = "y") + 
+  theme_void() + scale_fill_manual(values=c("orange", "black")) +
+  labs(title = "Overall Percentage of 3 pointers scored", fill = "3 Pointer scored")
+```
+
+# Hypothesis
+
+***The hypothesis of this analysis is whether more NBA players are skillful in scoring three pointers in 2010s compared to 2000s.***
+
+
+# Analysis
+
+Now lets closely analyze 3 pointers statistics in these two decades: 2000s and 2010s
+
+| In this graph we can see that NBA players in 2010s have attempted to score 3 pointers more than players in 2000s. Specifically, amount of 3 pointers attempted in 2000s is less than the ones in 2010s by `r round(percentage_diff_attempts,2)`%.
+
+```{r fig.height=3, fig.width=4}
+
+ggplot(nba, aes(x=decade, y=fg3a, fill=decade)) + geom_bar(stat="identity") +
+  theme_bw() + scale_fill_manual('Decade', values=c("2000s" = "orange", "2010s" = "black")) +
+  labs(x="Decade", y="Count", title = "Count of 3 pointers attempted by decade")
+```
+
+In this graph we can see that NBA players in 2010s have scored 3 pointers more than players in 2000s. Specifically, number of 3 pointers scored in 2000s is less than the ones in 2010s by `r round(percentage_diff_scored,2)`%.
+
+```{r fig.height=3, fig.width=4}
+ggplot(nba, aes(x=decade, y=fg3m, fill=decade)) + geom_bar(stat="identity") +
+  theme_bw() + scale_fill_manual('Decade', values=c("2000s" = "orange", "2010s" = "black")) + 
+  labs(x="Decade", y="Count", title = "Count of 3 pointers scored by decade")
+```
+
+The graph below shows that mostly in every particular number of 3 pointers attempted in a single game by a single player 2010s take the lead. 2010s even hold some records of 19 attempts in a single game, which is a very high indicator.
+
+```{r fig.height=3.5, fig.width=6}
+ggplot(nba, aes(x=fg3a, fill=decade)) + geom_bar(position = "fill") +
+  theme_bw() + scale_fill_manual('Decade', values=c("2000s" = "orange", "2010s" = "black")) + 
+  labs(title = "Percentage of particular number of 3 pointers attempted by decade", y="Percentage", x = "Number of 3 pointers scored", fill = "Decade")
+```
+
+The same picture can be observed for the scored 3 pointers. The below graph shows that almost in every particular number of 3 pointers scored in a single game by a single player 2010s are dominating. Interestingly, 2010s had games where a player scored 10 and 11 three pointers during a single game, whereas in 2000s the maximum number of 3 pointers in a single game was 9.
+
+```{r fig.height=3.5, fig.width=5.7}
+ggplot(nba, aes(x=fg3m, fill=decade)) + geom_bar(position = "fill") +
+  theme_bw() + scale_fill_manual('Decade', values=c("2000s" = "orange", "2010s" = "black")) + 
+  labs(title = "Percentage of particular number of 3 pointers scored by decade", y="Percentage", x = "Number of 3 pointers scored", fill = "Decade")
+```
+
+Next, we compare overall 3 pointer attempts percentage in both decades. As one may suppose, 2010s show higher rate of attempts. To be more precise the percentage of 3 pointer attempts in 2000s is `r round(nba_2000_three_pointer_a_per,2)`% and in 2010s is `r round(nba_2010_three_pointer_a_per,2)`%.
+
+```{r fig.height=3.7, fig.width=7}
+g3 <- ggplot(nba_2000_2009, aes(x = factor(1), fill = three_pointer_attempt)) +      geom_bar(width = 1) + 
+  coord_polar(theta = 'y') + theme_void() + scale_fill_manual(values=c("orange", "black")) +
+  labs(title = "Overall Percentage of 3 pointers attempts in 2000s",  fill= "3 Pointers attempted")
+
+g4 <- ggplot(nba_2010_2018, aes(x = factor(1), fill = three_pointer_attempt)) + geom_bar(width = 1) + 
+  coord_polar(theta = 'y') + theme_void() + scale_fill_manual(values=c("orange", "black")) +
+  labs(title = "Overall Percentage of 3 pointers attempts in 2010s",  fill= "3 Pointers attempted")
+
+g3/g4
+```
+
+In a same manner, we observe overall percentage of 3 pointers scored by decade. 2010s showed significantly higher rate of made 3 pointers compared to 2000s. So, the percentage of 3 pointers scored in 2000s is `r round(nba_2000_three_pointer_s_per,2)`%, and in 2010s is `r round(nba_2010_three_pointer_s_per,2)`%.
+
+```{r fig.height=3.7, fig.width=7}
+g1 <- ggplot(nba_2000_2009, aes(x = factor(1), fill = three_pointer)) + geom_bar(width = 1) + 
+  coord_polar(theta = 'y') + theme_void() + scale_fill_manual(values=c("orange", "black")) +
+  labs(title = "Overall Percentage of 3 pointers attempts in 2000s", fill= "3 Pointers scored" )
+
+g2 <- ggplot(nba_2010_2018, aes(x = factor(1), fill = three_pointer)) + geom_bar(width = 1) + 
+  coord_polar(theta = 'y') + theme_void() + scale_fill_manual(values=c("orange", "black")) +
+  labs(title = "Overall Percentage of 3 pointers attempts in 2010s",  fill= "3 Pointers scored")
+
+g1/g2
+```
+
+Although we saw that 2010s hold better results in every factor regarding 3 pointer goals, this decade shows slightly better rate of mean of percentages of scored 3 pointers. In other words, considering every player and every game even those games where players scored no 3 pointers, the mean of the percentages does not differ much.
+
+```{r fig.height=3.5, fig.width=4.8}
+nba %>%
+  group_by(decade)  %>%
+  summarise(mean_of_fg3_pct =  mean(fg3_pct)) %>%
+  ggplot(aes(x=decade,  y=mean_of_fg3_pct, fill=decade))  +
+  geom_bar(stat = "identity") +
+  theme_bw() + scale_fill_manual('Decade', values=c("2000s" = "orange", "2010s" = "black")) +
+  labs(title = "Mean of percentages of scored 3 pointers by decade", x = "Decade", y = "Mean of percentage")
+```
+
+Next, we look at the count of times when a single player made 6 or more 3 pointers in a single game. 2010s have significantly greater number of such cases. In 2000s there were `r nba_2000_more_than_five` of such cases, while in 2010s `r nba_2010_more_than_five`. So, as we can see this number in 2010s is `r round(nba_2010_more_than_five/nba_2000_more_than_five,1)` times greater than in 2000s.
+
+```{r fig.height=3.5, fig.width=4.5}
+nba  %>%
+  filter(three_pointer_more_than_five == T) %>%
+  group_by(decade)  %>%
+  summarise(count  = n()) %>%
+  ggplot(aes(x=decade, y=count, fill=decade)) + geom_bar(stat = "identity") +
+  theme_bw() + scale_fill_manual('Decade', values=c("2000s" = "orange", "2010s" = "black")) +
+  labs(title = 'Count of 6 or more 3 pointers scored', x = 'Decade', y = 'Count')
+```
+
+The last plot shows the average of minutes needed for players to score a 3 pointer arranged by count. In the interval from 0 to 20 minutes played by a player many more 3 pointers were scored in 2010s. This means that more players in 2010s on average can score 3 pointers on the interval from 0 to 20 minutes, compared to 2000s. And on the interval from 20 to 60 minutes the distribution of two decades are the same. Interestingly, for a player in 2010s it takes in average `r round(mean(nba_2010_2018_temp$aver_min_three_pointer, na.rm = T),1)` minutes to score a 3 pointer while for a player in 2000s it takes `r round(mean(nba_2000_2009_temp$aver_min_three_pointer, na.rm = T),1)` minutes.
+
+```{r fig.width=7.5, fig.height=3.5}
+
+ggplot(nba, aes(x=aver_min_three_pointer, fill=decade)) + geom_histogram() + 
+  facet_grid(.~decade) + 
+  theme_bw() +
+  scale_fill_manual('Decade', values=c("2000s" = "orange", "2010s" = "black")) +
+  theme(legend.position = "none") + 
+  labs(y="Count", x="Minutes", title = "Average minutes needed for a player to score 3 pointer in a certain game by decade")
+
+```
+
+
+\pagebreak
+
+# Summary of findings
+
+|   In a conclusion, we can clearly say that our hypothesis has been proved. NBA players attempted and scored more 3 pointers in 2010s compared to 2000s, which proves that they become much more skillful in this particular indicator. It also implies that players, which initially are not supposed to be good at 3 pointers, such as Center players, can score 3 pointers, which can be proved by the high rate of 3 pointer attempts. During 2010s overall more 3 pointers were scored and, specifically, higher number of 3 pointers were scored by a single player in a single game. 2010s gave to the court 3 pointer geniuses like Steph Curry and Klay Thompson the world has never seen before. Therefore, to sum up, more 3 pointers were attempted and scored in 2010s compared to 2000s and many more players are skillful in shooting 3 pointers.
+|   Finally, we want you to watch these two videos, one showing Klay Thompson scoring 14 three pointers in a single game in 2018 breaking the record set by his fellow teammate Steph Curry (https://www.youtube.com/watch?v=LWc1OU3sfds). And the second one of Brook Lopez, a Center position player having height of 2.13m, scoring 4 pointers in a single game in 2016 (https://www.youtube.com/watch?v=yzCLnOwJZbw). Note: these are videos showing games from Regular season, whereas in our analysis we used only postseason stats (Playoffs and Finals).
+
+
+
+
+
+
+
+
+
+
